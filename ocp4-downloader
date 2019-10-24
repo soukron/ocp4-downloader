@@ -14,12 +14,12 @@ ODO_URL=${BASE_URL}/odo
 SERVERLESS_URL=${BASE_URL}/serverless
 
 # cleanup on exit
-function cleanup() {
+function cleanup_on_exit() {
   rm -fr ${TMPDIR}
   popd &>/dev/null
   kill 0
 }
-trap cleanup EXIT
+trap cleanup_on_exit EXIT
 
 # usage
 function usage() {
@@ -38,10 +38,51 @@ EOF
   exit 0
 }
 
+# download and extract a file
+# $1 - prefix
+# $2 - version
+# $3 - baseurl
+# $4 - filename
+# $5 - tar opts
+# $6 - size
+function download_and_extract() {
+  echo "[${1}] Downloading version ${2} to disk (~${6})..."
+  wget -q ${3}/${2}/${4} -O ${TMPDIR}/${4} || { echo "[${1}] ERROR: error downloading file, can't continue with installation."; return 1; }
+
+  echo "[$1] Extracting..."
+  tar ${5} ${TMPDIR}/${4} -C ${TMPDIR} || { echo "[${1}] ERROR: error extracting file, can't continue with installation."; return 1; }
+
+  return 0
+}
+
+# cleanup if --force is present
+# $1 - prefix
+# $2 - files to delete
+function cleanup_if_force() {
+  if [[ ${FORCE} ]]; then
+    echo "[${1}] Cleaning up previous existing file..."
+    rm -fr ${2}
+  fi
+}
+
+# check if file exists
+# $1 - prefix
+# $2 - file
+function check_if_exists() {
+  if [[ -f ${2} ]]; then
+    echo "[${1}] File ${2} is already present. Skipping installation."
+    return 1
+  fi
+  return 0
+}
+
 # download openshift-client
 function download_openshift_client() {
   # exit if no action required
   [[ ! -v ALL && ! -v CLIENT ]] && return
+
+  # prefix to use during this process
+  PREFIX=openshift-client
 
   # convert "latest" to the latest released version
   if [[ ${1} == "latest" ]]; then
@@ -50,35 +91,30 @@ function download_openshift_client() {
     VERSION=${1}
   fi
 
-  # cleanup if --force is present
-  if [[ ${FORCE} ]]; then
-    echo "[openshift-client] Cleaning up previous existing file..."
-    rm -fr openshift-client-*${VERSION}* kubectl-linux-${VERSION}
-  fi
+  # cleanup if required
+  cleanup_if_force ${PREFIX} "openshift-client-linux-${VERSION} kubectl-linux-${VERSION}"
 
-  # exit if exists
-  if [[ -f openshift-client-linux-${VERSION} ]]; then
-    echo "[openshift-client] Version ${VERSION} is already present. Skipping installation."
-  else
-    echo "[openshift-client] Downloading version ${VERSION} to disk (~30MB)..."
-    wget -q ${OPENSHIFT_URL}/${VERSION}/openshift-client-linux-${VERSION}.tar.gz -O ${TMPDIR}/openshift-client-linux.tar.gz || { echo "[openshift-client] ERROR: error downloading file, can't continue with installation."; return; }
+  # exit if file already exists
+  check_if_exists ${PREFIX} openshift-client-linux-${VERSION} || return
 
-    echo "[openshift-client] Extracting..."
-    tar xfz ${TMPDIR}/openshift-client-linux.tar.gz -C ${TMPDIR} || { echo "[openshift-client] ERROR: error extracting file, can't continue with installation."; return; }
+  # download and extract the content
+  download_and_extract ${PREFIX} ${VERSION} ${OPENSHIFT_URL} openshift-client-linux-${VERSION}.tar.gz xfz 30MB || return
 
-    mv ${TMPDIR}/oc openshift-client-linux-${VERSION}
-    ln -sf openshift-client-linux-${VERSION} oc
-    mv ${TMPDIR}/kubectl kubectl-linux-${VERSION}
-    ln -sf kubectl-linux-${VERSION} kubectl
-
-    echo "[openshift-client] openshift-client ${VERSION} successfully installed!!"
-  fi
+  # do the installation
+  mv ${TMPDIR}/oc openshift-client-linux-${VERSION}
+  ln -sf openshift-client-linux-${VERSION} oc
+  mv ${TMPDIR}/kubectl kubectl-linux-${VERSION}
+  ln -sf kubectl-linux-${VERSION} kubectl
+  echo "[${PREFIX}] openshift-client ${VERSION} successfully installed!!"
 }
 
 # download crc
 function download_crc() {
   # exit if no action required
   [[ ! -v ALL && ! -v CRC ]] && return
+
+  # prefix to use during this process
+  PREFIX=crc
 
   # convert "latest" to the latest released version
   if [[ ${1} == "latest" ]]; then
@@ -87,33 +123,28 @@ function download_crc() {
     VERSION=${1}
   fi
 
-  # cleanup if --force is present
-  if [[ ${FORCE} ]]; then
-    echo "[crc] Cleaning up previous existing file..."
-    rm -fr crc-linux-${VERSION}*
-  fi
+  # cleanup if required
+  cleanup_if_force ${PREFIX} crc-linux-${VERSION}
 
-  # exit if exists
-  if [[ -f crc-linux-${VERSION} ]]; then
-    echo "[crc] Version ${VERSION} is already present. Skipping installation."
-  else
-    echo "[crc] Downloading version ${VERSION} to disk (~2GB)..."
-    wget -q ${CRC_URL}/${VERSION}/crc-linux-amd64.tar.xz -O ${TMPDIR}/crc-linux-amd64.tar.xz || { echo "[crc] ERROR: error downloading file, can't continue with installation."; return; }
+  # exit if file already exists
+  check_if_exists ${PREFIX} crc-linux-${VERSION} || return
 
-    echo "[crc] Extracting..."
-    tar xfJ ${TMPDIR}/crc-linux-amd64.tar.xz -C ${TMPDIR} || { echo "[crc] ERROR: error extracting file, can't continue with installation."; return; }
+  # download and extract the content
+  download_and_extract ${PREFIX} ${VERSION} ${CRC_URL} crc-linux-amd64.tar.xz xfJ 2GB || return
 
-    mv ${TMPDIR}/crc-linux-${VERSION}-amd64/crc crc-linux-${VERSION}
-    ln -sf crc-linux-${VERSION} crc
-
-    echo "[crc] crc ${VERSION} successfully installed!!"
-  fi
+  # do the installation
+  mv ${TMPDIR}/crc-linux-${VERSION}-amd64/crc crc-linux-${VERSION}
+  ln -sf crc-linux-${VERSION} crc
+  echo "[${PREFIX}] crc ${VERSION} successfully installed!!"
 }
 
 # download openshift-installer
 function download_openshift_installer() {
   # exit if no action required
   [[ ! -v ALL && ! -v INSTALLER ]] && return
+
+  # prefix to use during this process
+  PREFIX=openshift-install
 
   # convert "latest" to the latest released version
   if [[ ${1} == "latest" ]]; then
@@ -122,27 +153,19 @@ function download_openshift_installer() {
     VERSION=${1}
   fi
 
-  # cleanup if --force is present
-  if [[ ${FORCE} ]]; then
-    echo "[openshift-install] Cleaning up previous existing file..."
-    rm -fr openshift-install-*${VERSION}*
-  fi
+  # cleanup if required
+  cleanup_if_force ${PREFIX} openshift-install-linux-${VERSION}
 
-  # exit if exists
-  if [[ -f openshift-install-linux-${VERSION} ]]; then
-    echo "[openshift-install] Version ${VERSION} is already present. Skipping installation."
-  else
-    echo "[openshift-install] Downloading version ${VERSION} to disk (~70MB)..."
-    wget -q ${OPENSHIFT_URL}/${VERSION}/openshift-install-linux-${VERSION}.tar.gz -O ${TMPDIR}/openshift-install-linux.tar.gz || { echo "[openshift-install] ERROR: error downloading file, can't continue with installation."; return; }
+  # exit if file already exists
+  check_if_exists ${PREFIX} openshift-install-linux-${VERSION} || return
 
-    echo "[openshift-install] Extracting..."
-    tar xfz ${TMPDIR}/openshift-install-linux.tar.gz -C ${TMPDIR} || { echo "[openshift-install] ERROR: error extracting file, can't continue with installation."; return; }
+  # download and extract the content
+  download_and_extract ${PREFIX} ${VERSION} ${OPENSHIFT_URL} openshift-install-linux-${VERSION}.tar.gz xfz 70MB || return
 
-    mv ${TMPDIR}/openshift-install openshift-install-linux-${VERSION}
-    ln -sf openshift-install-linux-${VERSION} openshift-install
-
-    echo "[openshift-install] openshift-install ${VERSION} successfully installed!!"
-  fi
+  # do the installation
+  mv ${TMPDIR}/openshift-install openshift-install-linux-${VERSION}
+  ln -sf openshift-install-linux-${VERSION} openshift-install
+  echo "[${PREFIX}] openshift-install ${VERSION} successfully installed!!"
 }
 
 # download odo
@@ -150,42 +173,33 @@ function download_odo() {
   # exit if no action required
   [[ ! -v ALL && ! -v ODO ]] && return
 
+  # prefix to use during this process
+  PREFIX=odo
+
   # if "latest" download it and extract - odo must be done this way as there's no metadata.json nor release-info.json
   VERSION=${1}
   if [[ ${1} == "latest" ]]; then
-    echo "[odo] Downloading version ${VERSION} to disk (~25MB)..."
-    wget -q ${ODO_URL}/${VERSION}/odo-linux-amd64.tar.gz -O ${TMPDIR}/odo-linux-amd64.tar.gz || { echo "[odo] ERROR: error downloading file, can't continue with installation."; return; }
-
-    echo "[odo] Extracting..."
-    tar xfz ${TMPDIR}/odo-linux-amd64.tar.gz -C ${TMPDIR} || { echo "[odo] ERROR: error extracting file, can't continue with installation."; return; }
+    download_and_extract ${PREFIX} ${VERSION} ${ODO_URL} odo-linux-amd64.tar.gz xfz 25MB || return
 
     # convert "latest" to the latest released version
     VERSION=$( ${TMPDIR}/odo version | grep -Po '(?<=odo v).*(\s)' | cut -d " " -f 1 | tr -d " " )
   fi
 
-  # cleanup if --force is present
-  if [[ ${FORCE} ]]; then
-    echo  "[odo] Cleaning up previous existing file..."
-    rm -fr odo-linux-${VERSION}
+  # cleanup if required
+  cleanup_if_force ${PREFIX} odo-linux-${VERSION}
+
+  # exit if file already exists
+  check_if_exists ${PREFIX} odo-linux-${VERSION} || return
+
+  # download and extract the content if it's not already downloaded
+  if [[ ! -f ${TMPDIR}/odo ]]; then
+    download_and_extract ${PREFIX} ${VERSION} ${ODO_URL} odo-linux-amd64.tar.gz xfz 25MB || return
   fi
 
-  # exit if exists
-  if [[ -f odo-linux-${VERSION} ]]; then
-    echo "[odo] Version ${VERSION} is already present. Skipping installation."
-  else
-    if [[ ! -f ${TMPDIR}/odo ]]; then
-      echo "[odo] Downloading version ${VERSION} to disk (~25MB)..."
-      wget -q ${ODO_URL}/v${VERSION}/odo-linux-amd64.tar.gz -O ${TMPDIR}/odo-linux-amd64.tar.gz || { echo "ERROR: error downloading file, can't continue with installation."; return; }
-
-      echo "[odo] Extracting..."
-      tar xfz ${TMPDIR}/odo-linux-amd64.tar.gz -C ${TMPDIR} || { echo  "ERROR: error extracting file, can't continue with installation."; return; }
-    fi
-
-    mv ${TMPDIR}/odo odo-linux-${VERSION}
-    ln -sf odo-linux-${VERSION} odo
-
-    echo "[odo] odo ${VERSION} successfully installed!!"
-  fi
+  # do the installation
+  mv ${TMPDIR}/odo odo-linux-${VERSION}
+  ln -sf odo-linux-${VERSION} odo
+  echo "[${PREFIX}] odo ${VERSION} successfully installed!!"
 }
 
 # download serverless
@@ -193,7 +207,10 @@ function download_serverless() {
   # exit if no action required
   [[ ! -v ALL && ! -v SERVERLESS ]] && return
 
-  echo "[serverless] Pending to implement. Skipping installation."
+  # prefix to use during this process
+  PREFIX=serverless
+
+  echo "[${PREFIX}] Pending to implement. Skipping installation."
 }
 
 # parse arguments from commandline

@@ -11,14 +11,15 @@ While this script will allow you to download product related with OpenShift 4 fr
 
 ## Usage
 ~~~
-Usage: ocp4-downloader [--force] [--version <ver>] [--all|--client|--install|installer|--crc|--odo]
-  --all               downloads all products.
-  --client            downloads openshift-client.
-  --crc               downloads CodeReady Containers (crc).
-  --force             deletes any existing file.
-  --install|installer downloads openshift-install.
-  --odo               downloads OpenShift CLI for Developers (odo).
-  --version <ver>     select the version to download for all components. Default: latest.
+Usage: ocp4-downloader [--force] [--version <ver>] [--all|--client|--oc|--install|installer|--crc|--odo]
+  --all               downloads all products
+  --client|--oc       downloads OpenShift CLI (oc / kubectl)
+  --crc               downloads CodeReady Containers (crc)
+  --force             deletes any existing file matching the version
+  --help|-h           shows this message
+  --install|installer downloads OpenShift Installer (openshift-install)
+  --odo               downloads OpenShift CLI for Developers (odo)
+  --version <ver>     select the version to download for all components. Default: latest
 ~~~
 
 ## Examples
@@ -28,9 +29,9 @@ Usage: ocp4-downloader [--force] [--version <ver>] [--all|--client|--install|ins
   -> Requested to download only some products: openshift-client.
   -> Requested to download latest version of each requested component.
 
-  [openshift-client] --> Downloading version 4.2.0 to disk (~30MB)...
-  [openshift-client] --> Extracting... 
-  [openshift-client] --> openshift-client 4.2.0 successfully installed!!
+  [openshift-client] Downloading version 4.2.0 to disk (~30MB)...
+  [openshift-client] Extracting... 
+  [openshift-client] openshift-client 4.2.0 successfully installed!!
   
   $ ls -l $(which oc)
   lrwxrwxrwx 1 sgarcia sgarcia 29 Oct 24 04:24 /home/sgarcia/bin/oc -> openshift-client-linux-4.2.0
@@ -42,12 +43,12 @@ Usage: ocp4-downloader [--force] [--version <ver>] [--all|--client|--install|ins
   -> Requested to download only some products: openshift-client openshift-install.
   -> Requested to download 4.1.20 version of each requested component.
 
-  [openshift-install] --> Downloading version 4.1.20 to disk (~70MB)...
-  [openshift-client] --> Downloading version 4.1.20 to disk (~30MB)...
-  [openshift-client] --> Extracting... 
-  [openshift-client] --> openshift-client 4.1.20 successfully installed!!
-  [openshift-install] --> Extracting... 
-  [openshift-install] --> openshift-install 4.1.20 successfully installed!!
+  [openshift-install] Downloading version 4.1.20 to disk (~70MB)...
+  [openshift-client] Downloading version 4.1.20 to disk (~30MB)...
+  [openshift-client] Extracting... 
+  [openshift-client] openshift-client 4.1.20 successfully installed!!
+  [openshift-install] Extracting... 
+  [openshift-install] openshift-install 4.1.20 successfully installed!!
 
   $ ls -l $(which openshift-install oc)
   lrwxrwxrwx 1 sgarcia sgarcia 29 Oct 24 04:28 /home/sgarcia/bin/oc -> openshift-client-linux-4.1.20
@@ -60,18 +61,17 @@ Usage: ocp4-downloader [--force] [--version <ver>] [--all|--client|--install|ins
   -> Requested to download all products: openshift-client openshift-install crc odo.
   -> Requested to download latest version of each requested component.
 
-  [odo] --> Downloading version latest to disk (~25MB)...
-  [crc] --> Version 1.0.0 is already present. Skipping installation.
-  [openshift-install] --> Downloading version 4.2.0 to disk (~70MB)...
-  [openshift-client] --> Version 4.2.0 is already present. Skipping installation.
-  [odo] --> Extracting...
-  [odo] --> odo 1.0.0 successfully installed!!
-  [openshift-install] --> Extracting... 
-  [openshift-install] --> openshift-install 4.2.0 successfully installed!!
+  [odo] Downloading version latest to disk (~25MB)...
+  [crc] Version 1.0.0 is already present. Skipping installation.
+  [openshift-install] Downloading version 4.2.0 to disk (~70MB)...
+  [openshift-client] Version 4.2.0 is already present. Skipping installation.
+  [odo] Extracting...
+  [odo] odo 1.0.0 successfully installed!!
+  [openshift-install] Extracting... 
+  [openshift-install] openshift-install 4.2.0 successfully installed!!
   ~~~
 
 ## Todo
-- Optimize the code to avoid repeat blocks of code
 - Manage symlinks from the tool itself to switch between versions
 
 ## Contact

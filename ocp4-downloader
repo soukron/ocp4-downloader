@@ -11,7 +11,6 @@ BASE_URL=https://mirror.openshift.com/pub/openshift-v4/clients
 OPENSHIFT_URL=${BASE_URL}/ocp
 CRC_URL=${BASE_URL}/crc
 ODO_URL=${BASE_URL}/odo
-SERVERLESS_URL=${BASE_URL}/serverless
 
 # cleanup on exit
 function cleanup_on_exit() {
@@ -32,7 +31,6 @@ Usage: `basename ${0}` [--force] [--version <ver>] [--all|--client|--install|ins
   --help|-h           shows this message
   --install|installer downloads OpenShift Installer (openshift-install)
   --odo               downloads OpenShift CLI for Developers (odo)
-  --serverless|--kn   downloads OpenShift Serverless tool (kn)
   --version <ver>     select the version to download for all components. Default: latest
 EOF
   exit 0
@@ -43,14 +41,12 @@ EOF
 # $2 - version
 # $3 - baseurl
 # $4 - filename
-# $5 - tar opts
-# $6 - size
 function download_and_extract() {
-  echo "[${1}] Downloading version ${2} to disk (~${6})..."
+  echo "[${1}] Downloading ${4} to disk, please be patient..."
   wget -q ${3}/${2}/${4} -O ${TMPDIR}/${4} || { echo "[${1}] ERROR: error downloading file, can't continue with installation."; return 1; }
 
   echo "[$1] Extracting..."
-  tar ${5} ${TMPDIR}/${4} -C ${TMPDIR} || { echo "[${1}] ERROR: error extracting file, can't continue with installation."; return 1; }
+  tar xfa ${TMPDIR}/${4} -C ${TMPDIR} || { echo "[${1}] ERROR: error extracting file, can't continue with installation."; return 1; }
 
   return 0
 }
@@ -76,141 +72,79 @@ function check_if_exists() {
   return 0
 }
 
-# download openshift-client
-function download_openshift_client() {
-  # exit if no action required
-  [[ ! -v ALL && ! -v CLIENT ]] && return
-
-  # prefix to use during this process
-  PREFIX=openshift-client
-
-  # convert "latest" to the latest released version
-  if [[ ${1} == "latest" ]]; then
-    VERSION=$( curl -s ${OPENSHIFT_URL}/latest/release.txt | grep "Release Metadata:" -A1 | grep Version | cut -d\: -f 2 | tr -d " " )
-  else
-    VERSION=${1}
-  fi
-
-  # cleanup if required
-  cleanup_if_force ${PREFIX} "openshift-client-linux-${VERSION} kubectl-linux-${VERSION}"
-
-  # exit if file already exists
-  check_if_exists ${PREFIX} openshift-client-linux-${VERSION} || return
-
-  # download and extract the content
-  download_and_extract ${PREFIX} ${VERSION} ${OPENSHIFT_URL} openshift-client-linux-${VERSION}.tar.gz xfz 30MB || return
-
-  # do the installation
-  mv ${TMPDIR}/oc openshift-client-linux-${VERSION}
-  ln -sf openshift-client-linux-${VERSION} oc
-  mv ${TMPDIR}/kubectl kubectl-linux-${VERSION}
-  ln -sf kubectl-linux-${VERSION} kubectl
-  echo "[${PREFIX}] openshift-client ${VERSION} successfully installed!!"
-}
-
-# download crc
-function download_crc() {
-  # exit if no action required
-  [[ ! -v ALL && ! -v CRC ]] && return
-
-  # prefix to use during this process
-  PREFIX=crc
+# generic download function
+# $1 - product name / prefix
+# $2 - version
+function download_product() {
+  # set prefix
+  PREFIX=${1}
+  VERSION=${2}
 
   # convert "latest" to the latest released version
-  if [[ ${1} == "latest" ]]; then
-    VERSION=$( curl -s ${CRC_URL}/latest/release-info.json | grep crcVersion | cut -d \" -f 4 - | tr -d " " )
-  else
-    VERSION=${1}
+  if [[ ${VERSION} == "latest" ]]; then
+    case ${PREFIX} in
+      openshift-client|openshift-install)
+        VERSION=$( curl -s ${OPENSHIFT_URL}/latest/release.txt | grep "Release Metadata:" -A1 | grep Version | cut -d\: -f 2 | tr -d " " )
+        ;;
+      crc)
+        VERSION=$( curl -s ${CRC_URL}/latest/release-info.json | grep crcVersion | cut -d \" -f 4 - | tr -d " " )
+        ;;
+      odo)
+        download_and_extract ${PREFIX} ${VERSION} ${ODO_URL} odo-linux-amd64.tar.gz || return
+        VERSION=$( ${TMPDIR}/odo version | grep -Po '(?<=odo v).*(\s)' | cut -d " " -f 1 | tr -d " " )
+    esac
   fi
 
-  # cleanup if required
-  cleanup_if_force ${PREFIX} crc-linux-${VERSION}
+  # vars to use during rest of the process
+  case ${PREFIX} in
+    openshift-client)
+      FILENAME=openshift-client-linux-${VERSION}
+      REMOTE_FILENAME=${FILENAME}.tar.gz
+      URL=${OPENSHIFT_URL}
+      BINARY=oc
+      ;;
+    openshift-install)
+      FILENAME=openshift-install-linux-${VERSION}
+      REMOTE_FILENAME=${FILENAME}.tar.gz
+      URL=${OPENSHIFT_URL}
+      BINARY=openshift-install
+      ;;
+    crc)
+      FILENAME=crc-linux-${VERSION}
+      REMOTE_FILENAME=crc-linux-amd64.tar.xz
+      URL=${CRC_URL}
+      ;;
+    odo)
+      FILENAME=odo-linux-${VERSION}
+      REMOTE_FILENAME=odo-linux-amd64.tar.gz
+      URL=${ODO_URL}
+      ;;
+  esac
 
-  # exit if file already exists
-  check_if_exists ${PREFIX} crc-linux-${VERSION} || return
-
-  # download and extract the content
-  download_and_extract ${PREFIX} ${VERSION} ${CRC_URL} crc-linux-amd64.tar.xz xfJ 2GB || return
+  # pre-installation tasks
+  cleanup_if_force ${PREFIX} ${FILENAME}
+  check_if_exists ${PREFIX} ${FILENAME} || return
+  download_and_extract ${PREFIX} ${VERSION} ${URL} ${REMOTE_FILENAME} || return
 
   # do the installation
-  mv ${TMPDIR}/crc-linux-${VERSION}-amd64/crc crc-linux-${VERSION}
-  ln -sf crc-linux-${VERSION} crc
-  echo "[${PREFIX}] crc ${VERSION} successfully installed!!"
-}
-
-# download openshift-installer
-function download_openshift_installer() {
-  # exit if no action required
-  [[ ! -v ALL && ! -v INSTALLER ]] && return
-
-  # prefix to use during this process
-  PREFIX=openshift-install
-
-  # convert "latest" to the latest released version
-  if [[ ${1} == "latest" ]]; then
-    VERSION=$( curl -s ${OPENSHIFT_URL}/latest/release.txt | grep "Release Metadata:" -A1 | grep Version | cut -d\: -f 2 | tr -d " " )
-  else
-    VERSION=${1}
-  fi
-
-  # cleanup if required
-  cleanup_if_force ${PREFIX} openshift-install-linux-${VERSION}
-
-  # exit if file already exists
-  check_if_exists ${PREFIX} openshift-install-linux-${VERSION} || return
-
-  # download and extract the content
-  download_and_extract ${PREFIX} ${VERSION} ${OPENSHIFT_URL} openshift-install-linux-${VERSION}.tar.gz xfz 70MB || return
-
-  # do the installation
-  mv ${TMPDIR}/openshift-install openshift-install-linux-${VERSION}
-  ln -sf openshift-install-linux-${VERSION} openshift-install
-  echo "[${PREFIX}] openshift-install ${VERSION} successfully installed!!"
-}
-
-# download odo
-function download_odo() {
-  # exit if no action required
-  [[ ! -v ALL && ! -v ODO ]] && return
-
-  # prefix to use during this process
-  PREFIX=odo
-
-  # if "latest" download it and extract - odo must be done this way as there's no metadata.json nor release-info.json
-  VERSION=${1}
-  if [[ ${1} == "latest" ]]; then
-    download_and_extract ${PREFIX} ${VERSION} ${ODO_URL} odo-linux-amd64.tar.gz xfz 25MB || return
-
-    # convert "latest" to the latest released version
-    VERSION=$( ${TMPDIR}/odo version | grep -Po '(?<=odo v).*(\s)' | cut -d " " -f 1 | tr -d " " )
-  fi
-
-  # cleanup if required
-  cleanup_if_force ${PREFIX} odo-linux-${VERSION}
-
-  # exit if file already exists
-  check_if_exists ${PREFIX} odo-linux-${VERSION} || return
-
-  # download and extract the content if it's not already downloaded
-  if [[ ! -f ${TMPDIR}/odo ]]; then
-    download_and_extract ${PREFIX} ${VERSION} ${ODO_URL} odo-linux-amd64.tar.gz xfz 25MB || return
-  fi
-
-  # do the installation
-  mv ${TMPDIR}/odo odo-linux-${VERSION}
-  ln -sf odo-linux-${VERSION} odo
-  echo "[${PREFIX}] odo ${VERSION} successfully installed!!"
-}
-
-# download serverless
-function download_serverless() {
-  # exit if no action required
-  [[ ! -v ALL && ! -v SERVERLESS ]] && return
-
-  # prefix to use during this process
-  PREFIX=serverless
-
-  echo "[${PREFIX}] Pending to implement. Skipping installation."
+  case ${PREFIX} in
+    openshift-client|openshift-install)
+      mv ${TMPDIR}/${BINARY} ${FILENAME}
+      ln -sf ${FILENAME} ${BINARY}
+      ;;
+    crc)
+      mv ${TMPDIR}/${FILENAME}/crc ${FILENAME}
+      ln -sf ${FILENAME} crc
+      ;;
+    odo)
+      if [[ ! -f ${TMPDIR}/odo ]]; then
+        download_and_extract ${PREFIX} ${VERSION} ${URL} ${REMOTE_FILENAME} || return
+      fi
+      mv ${TMPDIR}/odo ${FILENAME}
+      ln -sf ${FILENAME} odo
+      ;;
+  esac
+  echo "[${PREFIX}] ${FILENAME} successfully installed!!"
 }
 
 # parse arguments from commandline
@@ -219,42 +153,14 @@ while [[ ${#} -gt 0 ]]
 do
   key="${1}"
   case ${key} in
-    -a|--all)
-    ALL=YES
-    shift
-    ;;
-    --client|--oc)
-    CLIENT=YES
-    shift
-    ;;
-    --crc)
-    CRC=YES
-    shift
-    ;;
-    -f|--force)
-    FORCE=YES
-    shift
-    ;;
-    --help|-h)
-    usage
-    ;;
-    --install|--installer)
-    INSTALLER=YES
-    shift
-    ;;
-    --odo)
-    ODO=YES
-    shift
-    ;;
-    --serverless|-kn)
-    SERVERLESS=YES
-    shift
-    ;;
-    --version)
-    CVERSION=$( echo ${2} | tr -d " " )
-    shift
-    shift
-    ;;
+    -a|--all)              ALL=YES; shift;;
+    --client|--oc)         CLIENT=YES; shift;;
+    --crc)                 CRC=YES; shift;;
+    -f|--force)            FORCE=YES; shift;;
+    --help|-h)             usage;;
+    --install|--installer) INSTALLER=YES; shift;;
+    --odo)                 ODO=YES; shift;;
+    --version)             CVERSION=$( echo ${2} | tr -d " " ); shift; shift;;
     *)
     POSITIONAL+=("${1}")
     echo -e "Error: Unknown parameter ${1}.\n"
@@ -275,21 +181,20 @@ TMPDIR=$( mktemp -d -p . )
 [[ ! -v CVERSION ]] && CVERSION="latest"
 
 # show usage if no product (or all) is selected
-if [[ "${ALL}" == "" && "${CLIENT}" == "" && "${INSTALLER}" == "" && "${CRC}" == "" && "${ODO}" == "" && "${SERVERLESS}" == "" ]]; then
+if [[ "${ALL}" == "" && "${CLIENT}" == "" && "${INSTALLER}" == "" && "${CRC}" == "" && "${ODO}" == "" ]]; then
   echo -e "Error: No product selected.\n"
   usage
 fi
 
 # print a summary before proceeding
 if [[ ${ALL} ]]; then
-  echo "[main] Requested to download all products: openshift-client openshift-install crc odo serverless."
+  echo "[main] Requested to download all products: openshift-client openshift-install crc odo."
 else
   echo -n "[main] Requested to download only some products:"
   [[ ${CLIENT} ]] && echo -n " openshift-client"
   [[ ${INSTALLER} ]] && echo -n " openshift-install"
   [[ ${CRC} ]] && echo -n " crc"
   [[ ${ODO} ]] && echo -n " odo"
-  [[ ${SERVERLESS} ]] && echo -n " serverless"
   echo "."
 fi
 [[ ${FORCE} ]] && echo "[main] Requested to overwrite any existing file if version matches."
@@ -297,10 +202,8 @@ echo "[main] Requested to download ${CVERSION} version of each requested compone
 echo
 
 # download components
-download_openshift_installer ${CVERSION} &
-download_openshift_client ${CVERSION} &
-download_crc ${CVERSION} &
-download_odo ${CVERSION} &
-download_serverless ${CVERSION} &
+[[ ${ALL} || ${INSTALLER} ]] && download_product openshift-install ${CVERSION} &
+[[ ${ALL} || ${CLIENT} ]] && download_product openshift-client ${CVERSION} &
+[[ ${ALL} || ${CRC} ]] && download_product crc ${CVERSION} &
+[[ ${ALL} || ${ODO} ]] && download_product odo ${CVERSION} &
 wait
-

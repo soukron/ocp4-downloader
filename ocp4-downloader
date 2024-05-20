@@ -135,7 +135,7 @@ function download_product() {
 
   # pre-installation tasks
   cleanup_if_force ${PREFIX} ${FILENAME}
-  check_if_exists ${PREFIX} ${FILENAME} ${DOWNLOAD} || return
+  check_if_exists ${PREFIX} ${FILENAME} ${DOWNLOAD} || DOWNLOAD="NO"
 
   # dont download, just update symlink
   if [[ ${DOWNLOAD} == "NO" ]]; then

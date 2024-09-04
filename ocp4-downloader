@@ -29,6 +29,7 @@ Usage: `basename ${0}` [--force] [--version <ver>] [--all|--client|--install|ins
   --crc               downloads CodeReady Containers (crc)
   --force             deletes any existing file matching the version
   --help|-h           shows this message
+  --installdir        sets the installation directory. Default: \$HOME/bin
   --install|installer downloads OpenShift Installer (openshift-install)
   --odo               downloads OpenShift CLI for Developers (odo)
   --set               updates the symlink to whatever set in --version parameter
@@ -177,6 +178,7 @@ do
     --crc)                 CRC=YES; shift;;
     -f|--force)            FORCE=YES; shift;;
     --help|-h)             usage;;
+    --installdir)          INSTALLDIR=$( echo ${2} ); shift; shift;;
     --install|--installer) INSTALLER=YES; shift;;
     --odo)                 ODO=YES; shift;;
     --set)                 DOWNLOAD=NO; shift;;

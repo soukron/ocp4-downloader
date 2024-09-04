@@ -117,7 +117,7 @@ if [ "\$1" == "--wrapper-set-default" ]; then
   if [ ! -f \${WRAPPER_BASEDIR}/\${WRAPPER_NAME}-\${2} ]; then
     echo "Error: unable to set as default a non-existant version"
   else
-    ln -s \${WRAPPER_NAME}-\${2} \${WRAPPER_BASEDIR}/\${WRAPPER_NAME}-default
+    ln -sf \${WRAPPER_NAME}-\${2} \${WRAPPER_BASEDIR}/\${WRAPPER_NAME}-default
   fi
 
   exit
